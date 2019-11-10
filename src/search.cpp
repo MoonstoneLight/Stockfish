@@ -431,8 +431,8 @@ void Thread::search() {
               // Reduce the search depth for this PV line based on
               // root move's previous score and number of PV line.
               int diffScore = (bestScore - previousScore) / (PawnValueEg / 2);
-              pvDepth = std::max(rootDepth - ((3 * diffScore + 2 * msb(pvIdx + 1)) / 2) * ONE_PLY,
-                                               std::max(rootDepth / 2, 5 * ONE_PLY));
+              pvDepth = std::max(rootDepth - ((3 * diffScore + 2 * msb(pvIdx + 1)) / 2),
+                                               std::max(rootDepth / 2, 5));
 
 //              std::cout << "Reduction based on score  : " << 3 * diffScore << std::endl;
 //              std::cout << "Reduction based on PV line: " << 2 * msb(pvIdx + 1) << std::endl;
@@ -445,7 +445,7 @@ void Thread::search() {
           int failedHighCnt = 0;
           while (true)
           {
-              adjustedDepth = std::max(pvDepth - failedHighCnt * ONE_PLY, ONE_PLY);
+              adjustedDepth = std::max(pvDepth - failedHighCnt);
               bestValue = ::search<PV>(rootPos, ss, alpha, beta, adjustedDepth, false);
 
               // Bring the best move to the front. It is critical that sorting
@@ -959,7 +959,7 @@ moves_loop: // When in check, search starts from here
       ss->moveCount = ++moveCount;
 
       if (rootNode && thisThread == Threads.main() && Time.elapsed() > 3000)
-          sync_cout << "info depth " << thisThread->rootDepth / ONE_PLY
+          sync_cout << "info depth " << thisThread->rootDepth
                     << " currmove " << UCI::move(move, pos.is_chess960())
                     << " currmovenumber " << moveCount + thisThread->pvIdx << sync_endl;
       if (PvNode)
