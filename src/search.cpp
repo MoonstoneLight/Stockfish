@@ -329,6 +329,7 @@ void Thread::search() {
   Value bestValue, alpha, beta, delta;
   Move  lastBestMove = MOVE_NONE;
   Depth lastBestMoveDepth = 0;
+  Depth adjustedDepth, pvDepth;
   MainThread* mainThread = (this == Threads.main() ? Threads.main() : nullptr);
   double timeReduction = 1, totBestMoveChanges = 0;
   Color us = rootPos.side_to_move();
@@ -391,6 +392,8 @@ void Thread::search() {
       // all the move scores except the (new) PV are set to -VALUE_INFINITE.
       for (RootMove& rm : rootMoves)
           rm.previousScore = rm.score;
+          
+          Value bestScore = rootMoves[0].previousScore;
 
       size_t pvFirst = 0;
       pvLast = 0;
@@ -408,11 +411,13 @@ void Thread::search() {
 
           // Reset UCI info selDepth for each depth and each PV line
           selDepth = 0;
+          pvDepth = rootDepth;
 
           // Reset aspiration window starting size
           if (rootDepth >= 4)
           {
               Value previousScore = rootMoves[pvIdx].previousScore;
+              
               delta = Value(21 + abs(previousScore) / 128);
               alpha = std::max(previousScore - delta,-VALUE_INFINITE);
               beta  = std::min(previousScore + delta, VALUE_INFINITE);
@@ -422,6 +427,18 @@ void Thread::search() {
 
               contempt = (us == WHITE ?  make_score(dct, dct / 2)
                                       : -make_score(dct, dct / 2));
+                                      
+
+              // Reduce the search depth for this PV line based on
+              // root move's previous score and number of PV line.
+              int diffScore = (bestScore - previousScore) / (PawnValueEg / 2);
+              pvDepth = std::max(rootDepth - (3 * diffScore + 2 * msb(pvIdx + 1)) / 2,
+                                 std::max(rootDepth / 2, 4));
+
+//              std::cout << "Reduction based on score  : " << 3 * diffScore << std::endl;
+//              std::cout << "Reduction based on PV line: " << 2 * msb(pvIdx + 1) << std::endl;
+//              std::cout << "Searching PV line " << pvIdx + 1 << " with depth " << pvDepth << std::endl;
+
           }
 
           // Start with a small aspiration window and, in the case of a fail
@@ -430,7 +447,7 @@ void Thread::search() {
           int failedHighCnt = 0;
           while (true)
           {
-              Depth adjustedDepth = std::max(1, rootDepth - failedHighCnt);
+              adjustedDepth = std::max(pvDepth - failedHighCnt, 1);
               bestValue = ::search<PV>(rootPos, ss, alpha, beta, adjustedDepth, false);
 
               // Bring the best move to the front. It is critical that sorting
@@ -944,7 +961,7 @@ moves_loop: // When in check, search starts from here
       ss->moveCount = ++moveCount;
 
       if (rootNode && thisThread == Threads.main() && Time.elapsed() > 3000)
-          sync_cout << "info depth " << depth
+          sync_cout << "info depth " << thisThread->rootDepth
                     << " currmove " << UCI::move(move, pos.is_chess960())
                     << " currmovenumber " << moveCount + thisThread->pvIdx << sync_endl;
       if (PvNode)
